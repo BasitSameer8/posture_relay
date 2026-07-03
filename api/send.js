@@ -12,14 +12,14 @@ export default async function handler(req, res) {
     const chatId = process.env.CHAT_ID;
 
     const telegram = await fetch(
-        `https://api.telegram.org/bot8884638958:AAG3KWTagMlx9cOC8gDDE-dRW2d9Mtvtozg/sendMessage`,
+        `https://api.telegram.org/bot${token}/sendMessage`,
         {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                chat_id: 6090201889,
+                chat_id: chatId,
                 text: message
             })
         }
