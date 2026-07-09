@@ -21,27 +21,46 @@ const MAX_HISTORY = 100;
 
 export default async function handler(req, res) {
   if (req.method === "POST") {
-    const { deviation, slouching } = req.body;
+    try {
+      const { deviation, slouching } = req.body ?? {};
 
-    if (typeof deviation !== "number" || typeof slouching !== "boolean") {
-      return res.status(400).json({ error: "deviation (number) and slouching (bool) required" });
+      if (typeof deviation !== "number" || typeof slouching !== "boolean") {
+        return res.status(400).json({ error: "deviation (number) and slouching (bool) required" });
+      }
+
+      const reading = { deviation, slouching, timestamp: Date.now() };
+
+      await redis.set("posture:latest", reading);
+      await redis.lpush(HISTORY_KEY, JSON.stringify(reading));
+      await redis.ltrim(HISTORY_KEY, 0, MAX_HISTORY - 1);
+
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error("POST /api/posture failed:", err);
+      return res.status(500).json({ error: "Failed to store posture data", detail: String(err) });
     }
-
-    const reading = { deviation, slouching, timestamp: Date.now() };
-
-    await redis.set("posture:latest", reading);
-    await redis.lpush(HISTORY_KEY, JSON.stringify(reading));
-    await redis.ltrim(HISTORY_KEY, 0, MAX_HISTORY - 1);
-
-    return res.status(200).json({ ok: true });
   }
 
   if (req.method === "GET") {
-    const latest = (await redis.get("posture:latest")) || null;
-    const rawHistory = (await redis.lrange(HISTORY_KEY, 0, MAX_HISTORY - 1)) || [];
-    const history = rawHistory.map((r) => (typeof r === "string" ? JSON.parse(r) : r)).reverse();
+    try {
+      const latest = (await redis.get("posture:latest")) ?? null;
+      const rawHistory = (await redis.lrange(HISTORY_KEY, 0, MAX_HISTORY - 1)) ?? [];
+      const history = rawHistory
+        .map((r) => {
+          try {
+            return typeof r === "string" ? JSON.parse(r) : r;
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean)
+        .reverse();
 
-    return res.status(200).json({ latest, history });
+      return res.status(200).json({ latest, history });
+    } catch (err) {
+      console.error("GET /api/posture failed:", err);
+      return res.status(500).json({ error: "Failed to read posture data", detail: String(err) });
+    }
   }
 
   res.setHeader("Allow", ["GET", "POST"]);
